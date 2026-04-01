@@ -692,7 +692,7 @@ export default function ArchV4() {
 
   const container: React.CSSProperties = {
     minHeight: "100vh", background: T.bg, fontFamily: T.fontSans, color: T.text,
-    display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 16px 100px 16px",
+    display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 16px 60px 16px",
     backgroundImage: "radial-gradient(ellipse at 30% 20%, #c8a05208 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, #c8a05205 0%, transparent 50%)",
   };
 
@@ -790,7 +790,7 @@ export default function ArchV4() {
     return (
       <div style={container}>
         <BreadcrumbBar stage={stage} setStageAndScroll={setStageAndScroll} />
-        <FooterBar saveFlash={saveFlash} onSave={autoSave} onExport={exportDraft} onImport={importDraft} />
+
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "24px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>REVIEW & REFINE</div>
           <h2 style={{ margin: "0 0 10px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>Here's what we understood</h2>
@@ -831,7 +831,7 @@ export default function ArchV4() {
     return (
       <div style={container}>
         <BreadcrumbBar stage={stage} setStageAndScroll={setStageAndScroll} />
-        <FooterBar saveFlash={saveFlash} onSave={autoSave} onExport={exportDraft} onImport={importDraft} />
+
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "24px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>CONSTRAINTS & CONTEXT</div>
           <h2 style={{ margin: "0 0 8px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>Anything we have to work around?</h2>
@@ -1034,7 +1034,7 @@ export default function ArchV4() {
     return (
       <div style={container}>
         <BreadcrumbBar stage={stage} setStageAndScroll={setStageAndScroll} />
-        <FooterBar saveFlash={saveFlash} onSave={autoSave} onExport={exportDraft} onImport={importDraft} />
+
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "24px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>TOOLS & INTEGRATIONS</div>
           <h2 style={{ margin: "0 0 8px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>What does your agent need to reach?</h2>
@@ -1059,7 +1059,7 @@ export default function ArchV4() {
     return (
       <div style={container}>
         <BreadcrumbBar stage={stage} setStageAndScroll={setStageAndScroll} />
-        <FooterBar saveFlash={saveFlash} onSave={autoSave} onExport={exportDraft} onImport={importDraft} />
+
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "24px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>SECURITY & COMPLIANCE</div>
           <h2 style={{ margin: "0 0 8px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>Security requirements</h2>
@@ -1088,7 +1088,7 @@ export default function ArchV4() {
     return (
       <div style={container}>
         <BreadcrumbBar stage={stage} setStageAndScroll={setStageAndScroll} />
-        <FooterBar saveFlash={saveFlash} onSave={autoSave} onExport={exportDraft} onImport={importDraft} />
+
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "24px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>READY TO GENERATE</div>
           <h2 style={{ margin: 0, fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>Review your specification</h2>
