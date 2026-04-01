@@ -91,6 +91,24 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/arch-recommender` (`@workspace/arch-recommender`)
+
+React + Vite SPA — the AI Agent Architecture Recommender wizard. Multi-stage flow: describe → analyze → refine → constraints → tools → security → review → generating → done.
+
+- Entry: `src/main.tsx`, renders `<ArchRecommender />` from `src/ArchRecommender.tsx`
+- Fonts: JetBrains Mono, Sora, Playfair Display, Nunito (loaded from Google Fonts in `index.html`)
+- All styling via inline styles — no Tailwind/shadcn used (design system via `T` object)
+- Calls `POST /api/arch/analyze` to parse descriptions via Claude (returns structured JSON)
+- Calls `POST /api/arch/generate` to stream a full architecture spec via SSE
+- Draft state saved to localStorage key `arch_v4_draft`; supports JSON export/import
+- Uses `react-markdown` + `remark-gfm` to render the streamed markdown spec
+- Vite proxies `/api` → `http://localhost:8080` in dev mode
+- Running on port 20608
+
+### `lib/integrations-anthropic-ai` (`@workspace/integrations-anthropic-ai`)
+
+Replit AI Integrations wrapper for Anthropic Claude. Provides a pre-configured `anthropic` client using `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` and `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (automatically provisioned, no user API key needed). Also includes batch processing utilities and DB schema for conversations/messages.
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.

@@ -8,3 +8,70 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface AnthropicConversation {
+  id: number;
+  title: string;
+  createdAt: string;
+}
+
+export interface AnthropicMessage {
+  id: number;
+  conversationId: number;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface CreateAnthropicConversationBody {
+  title: string;
+}
+
+export interface SendAnthropicMessageBody {
+  content: string;
+}
+
+export interface AnthropicConversationWithMessages {
+  id: number;
+  title: string;
+  createdAt: string;
+  messages: AnthropicMessage[];
+}
+
+export interface AnthropicError {
+  error: string;
+}
+
+export interface ArchAnalyzeBody {
+  description: string;
+}
+
+export interface ArchAnalyzeResult {
+  topology: string;
+  autonomy: string;
+  memory: string;
+  failure: string;
+  platform: string;
+  scaleRuns: string;
+  scaleConcurrent: string;
+  greenfield: string;
+  modelPref: string;
+  budget: string;
+  security: string[];
+  inferredTools: string[];
+  gaps: string[];
+  summary: string;
+}
+
+export type ArchGenerateBodyAnswers = { [key: string]: string };
+
+export interface ArchGenerateBody {
+  description: string;
+  answers: ArchGenerateBodyAnswers;
+  security: string[];
+  tools: string[];
+  constraints?: string;
+  customAgents?: string;
+  legacyDesc?: string;
+  summary?: string;
+}

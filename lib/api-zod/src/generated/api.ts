@@ -14,3 +14,118 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary List all conversations
+ */
+export const ListAnthropicConversationsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAnthropicConversationsResponse = zod.array(
+  ListAnthropicConversationsResponseItem,
+);
+
+/**
+ * @summary Create a new conversation
+ */
+export const CreateAnthropicConversationBody = zod.object({
+  title: zod.string(),
+});
+
+/**
+ * @summary Get conversation with messages
+ */
+export const GetAnthropicConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAnthropicConversationResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      role: zod.string(),
+      content: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Delete a conversation
+ */
+export const DeleteAnthropicConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List messages in a conversation
+ */
+export const ListAnthropicMessagesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListAnthropicMessagesResponseItem = zod.object({
+  id: zod.number(),
+  conversationId: zod.number(),
+  role: zod.string(),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAnthropicMessagesResponse = zod.array(
+  ListAnthropicMessagesResponseItem,
+);
+
+/**
+ * @summary Send a message and receive an AI response (SSE stream)
+ */
+export const SendAnthropicMessageParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SendAnthropicMessageBody = zod.object({
+  content: zod.string(),
+});
+
+/**
+ * @summary Analyze a free-text agent description and infer architecture parameters
+ */
+export const AnalyzeArchDescriptionBody = zod.object({
+  description: zod.string(),
+});
+
+export const AnalyzeArchDescriptionResponse = zod.object({
+  topology: zod.string(),
+  autonomy: zod.string(),
+  memory: zod.string(),
+  failure: zod.string(),
+  platform: zod.string(),
+  scaleRuns: zod.string(),
+  scaleConcurrent: zod.string(),
+  greenfield: zod.string(),
+  modelPref: zod.string(),
+  budget: zod.string(),
+  security: zod.array(zod.string()),
+  inferredTools: zod.array(zod.string()),
+  gaps: zod.array(zod.string()),
+  summary: zod.string(),
+});
+
+/**
+ * @summary Generate a full architecture spec as an SSE stream
+ */
+export const GenerateArchSpecBody = zod.object({
+  description: zod.string(),
+  answers: zod.record(zod.string(), zod.string()),
+  security: zod.array(zod.string()),
+  tools: zod.array(zod.string()),
+  constraints: zod.string().optional(),
+  customAgents: zod.string().optional(),
+  legacyDesc: zod.string().optional(),
+  summary: zod.string().optional(),
+});

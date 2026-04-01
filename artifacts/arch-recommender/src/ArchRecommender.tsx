@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const T = {
   bg: "#0d0e12",
@@ -538,6 +540,10 @@ export default function ArchV4() {
   const [tools, setTools] = useState<string[]>([]);
   const [toolSelections, setToolSelections] = useState(new Set<string>());
   const [saveFlash, setSaveFlash] = useState(false);
+  const [specContent, setSpecContent] = useState("");
+  const [specDone, setSpecDone] = useState(false);
+  const [specError, setSpecError] = useState<string | null>(null);
+  const specRef = useRef<HTMLDivElement>(null);
 
   const getDraft = () => ({
     stage, description, answers, security, tools: Array.from(toolSelections),
@@ -602,31 +608,86 @@ export default function ArchV4() {
 
   const setField = (key: string, val: string) => setAnswers(a => ({ ...a, [key]: val }));
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!description.trim()) return;
     setStageAndScroll("analyzing");
     setError(null);
-    setTimeout(() => {
-      try {
-        const result = inferFromDescription(description);
-        setInferred(result);
-        const prepped: Record<string, string> = {};
-        Object.keys(FIELDS).forEach(k => { if ((result as Record<string, string>)[k]) prepped[k] = (result as Record<string, string>)[k]; });
-        setAnswers(prepped);
-        if (result.security?.length) setSecurity(result.security);
-        if (result.inferredTools?.length) setTools(result.inferredTools);
-        setToolSelections(new Set());
-        setStageAndScroll("refine");
-      } catch (e: unknown) {
-        setError(`Analysis failed: ${(e as Error).message}`);
-        setStage("describe");
-      }
-    }, 1800);
+    try {
+      const res = await fetch("/api/arch/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description }),
+      });
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const result = await res.json() as ReturnType<typeof inferFromDescription>;
+      setInferred(result);
+      const prepped: Record<string, string> = {};
+      Object.keys(FIELDS).forEach(k => {
+        if ((result as Record<string, unknown>)[k]) prepped[k] = (result as Record<string, string>)[k];
+      });
+      setAnswers(prepped);
+      if (result.security?.length) setSecurity(result.security);
+      if (result.inferredTools?.length) setTools(result.inferredTools);
+      setToolSelections(new Set());
+      setStageAndScroll("refine");
+    } catch (e: unknown) {
+      setError(`Analysis failed: ${(e as Error).message}`);
+      setStage("describe");
+    }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    setSpecContent("");
+    setSpecDone(false);
+    setSpecError(null);
     setStageAndScroll("generating");
-    setTimeout(() => setStageAndScroll("done"), 2800);
+    try {
+      const res = await fetch("/api/arch/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description,
+          answers,
+          security,
+          tools: Array.from(toolSelections),
+          constraints,
+          customAgents,
+          legacyDesc,
+          summary: inferred?.summary ?? "",
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`Server error: ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const json = line.slice(6).trim();
+          if (!json) continue;
+          try {
+            const ev = JSON.parse(json) as { content?: string; done?: boolean; error?: string };
+            if (ev.error) { setSpecError(ev.error); break; }
+            if (ev.content) {
+              setSpecContent(prev => prev + ev.content);
+              if (specRef.current) specRef.current.scrollTop = specRef.current.scrollHeight;
+            }
+            if (ev.done) { setSpecDone(true); setStageAndScroll("done"); }
+          } catch { /* skip malformed events */ }
+        }
+      }
+      setSpecDone(true);
+      setStageAndScroll("done");
+    } catch (e: unknown) {
+      setSpecError(`Generation failed: ${(e as Error).message}`);
+      setSpecDone(true);
+      setStageAndScroll("done");
+    }
   };
 
   const container: React.CSSProperties = {
@@ -1105,58 +1166,110 @@ export default function ArchV4() {
   }
 
   if (stage === "generating") {
+    const hasContent = specContent.length > 0;
     return (
-      <div style={{ ...container, justifyContent: "center" }}>
-        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}`}</style>
-        <div style={{ ...card, textAlign: "center", maxWidth: "480px" }}>
-          <div style={{ fontSize: "32px", display: "inline-block", animation: "spin 1.8s linear infinite", marginBottom: "20px" }}>⚙️</div>
-          <MonoLabel>Agents deliberating</MonoLabel>
-          <h2 style={{ margin: "0 0 6px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "22px", color: T.text }}>Building your spec</h2>
-          <p style={{ color: T.muted, fontSize: "13px", margin: "0 0 24px" }}>30–60 seconds</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-            {["🏗️ AI Architect", "🔄 DevOps", "🔒 Security", "✍️ Tech Writing", "⚖️ Eval Specialist", "🛡️ Safety", "🧠 Memory & State"].map((a, i) => (
-              <div key={a} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 14px", background: T.surfaceRaised, borderRadius: "8px", fontSize: "12px", fontFamily: T.fontMono, color: T.muted, animation: `pulse 1.6s ease-in-out ${i * 0.18}s infinite` }}>
-                <span style={{ color: T.text }}>{a}</span>
-                <span style={{ marginLeft: "auto", color: T.accent, fontSize: "10px" }}>● ACTIVE</span>
-              </div>
-            ))}
+      <div style={{ ...container }}>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}@keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0}}`}</style>
+        <div style={{ maxWidth: "760px", width: "100%", marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ fontSize: "20px", display: "inline-block", animation: "spin 1.8s linear infinite" }}>⚙️</div>
+          <div>
+            <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em" }}>GENERATING SPEC</div>
+            <div style={{ fontSize: "13px", color: T.muted }}>{hasContent ? "Writing your architecture specification..." : "Claude is analyzing your requirements..."}</div>
           </div>
         </div>
+        {hasContent ? (
+          <div ref={specRef} style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", maxHeight: "70vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+            <style>{`
+              .spec-content h1{font-family:${T.fontDisplay};font-weight:400;font-size:26px;color:${T.text};margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid ${T.border}}
+              .spec-content h2{font-family:${T.fontDisplay};font-weight:400;font-size:20px;color:${T.accent};margin:28px 0 12px}
+              .spec-content h3{font-size:14px;font-weight:700;color:${T.text};margin:20px 0 8px;font-family:${T.fontSans}}
+              .spec-content p{font-size:13px;color:${T.muted};line-height:1.75;margin:0 0 12px}
+              .spec-content ul,.spec-content ol{margin:0 0 14px;padding-left:20px}
+              .spec-content li{font-size:13px;color:${T.muted};line-height:1.7;margin-bottom:4px}
+              .spec-content strong{color:${T.text};font-weight:700}
+              .spec-content code{font-family:${T.fontMono};font-size:11px;background:${T.surfaceRaised};border:1px solid ${T.border};border-radius:4px;padding:1px 5px;color:${T.accent}}
+              .spec-content pre{background:${T.surfaceRaised};border:1px solid ${T.border};border-radius:8px;padding:14px;overflow-x:auto;margin:0 0 14px}
+              .spec-content pre code{background:none;border:none;padding:0;font-size:12px;color:${T.text}}
+              .spec-content blockquote{border-left:3px solid ${T.accentBorder};margin:0 0 14px;padding:8px 16px;background:${T.accentDim};border-radius:0 8px 8px 0}
+              .spec-content blockquote p{color:${T.text};margin:0}
+              .spec-content hr{border:none;border-top:1px solid ${T.border};margin:24px 0}
+            `}</style>
+            <div className="spec-content">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{specContent}</ReactMarkdown>
+            </div>
+            <span style={{ display: "inline-block", width: "2px", height: "14px", background: T.accent, animation: "cursor-blink 1s ease-in-out infinite", verticalAlign: "middle", marginLeft: "2px" }} />
+          </div>
+        ) : (
+          <div style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              {["🏗️ AI Architect", "🔄 DevOps", "🔒 Security", "✍️ Tech Writing", "⚖️ Eval Specialist", "🛡️ Safety", "🧠 Memory & State"].map((a, i) => (
+                <div key={a} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 14px", background: T.surfaceRaised, borderRadius: "8px", fontSize: "12px", fontFamily: T.fontMono, color: T.muted, animation: `pulse 1.6s ease-in-out ${i * 0.18}s infinite` }}>
+                  <span style={{ color: T.text }}>{a}</span>
+                  <span style={{ marginLeft: "auto", color: T.accent, fontSize: "10px" }}>● ACTIVE</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   if (stage === "done") {
+    const copySpec = () => { navigator.clipboard.writeText(specContent).catch(() => {}); };
+    const downloadSpec = () => {
+      const blob = new Blob([specContent], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "architecture-spec.md"; a.click();
+      URL.revokeObjectURL(url);
+    };
     return (
-      <div style={{ ...container, justifyContent: "center" }}>
-        <div style={{ ...card, textAlign: "center", maxWidth: "540px" }}>
-          <div style={{ fontSize: "40px", marginBottom: "16px" }}>🏗️</div>
-          <MonoLabel>Spec ready</MonoLabel>
-          <h2 style={{ margin: "0 0 6px", fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "24px", color: T.text }}>Your architecture spec is ready.</h2>
-          <p style={{ color: T.muted, fontSize: "13px", margin: "0 0 24px" }}>7 agents consulted · tradeoffs debated · trip hazards surfaced</p>
-          <div style={{ textAlign: "left", marginBottom: "24px" }}>
-            {[
-              ["🏗️ Architect", "Recommended topology, orchestration pattern, and ADRs"],
-              ["🔄 DevOps", "Flagged service principal auth, secrets rotation, and deployment trip hazards"],
-              ["🔒 Security", "Applied compliance requirements and guardrail architecture"],
-              ["✍️ Tech Writing", "Generated Architecture Decision Records for 6 key decisions"],
-              ["⚖️ Eval Specialist", "Designed evaluation pipeline matched to autonomy level"],
-              ["🛡️ Safety", "Defined approval gates, escalation triggers, and blast radius limits"],
-              ["🧠 Memory", "Recommended memory tier, retrieval strategy, and context budget"],
-            ].map(([agent, note]) => (
-              <div key={agent} style={{ display: "flex", gap: "12px", padding: "10px 0", borderBottom: `1px solid ${T.border}`, fontSize: "13px" }}>
-                <span style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, minWidth: "160px", flexShrink: 0 }}>{agent}</span>
-                <span style={{ color: T.muted, lineHeight: 1.5 }}>{note}</span>
-              </div>
-            ))}
+      <div style={container}>
+        <style>{`
+          .spec-content h1{font-family:${T.fontDisplay};font-weight:400;font-size:26px;color:${T.text};margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid ${T.border}}
+          .spec-content h2{font-family:${T.fontDisplay};font-weight:400;font-size:20px;color:${T.accent};margin:28px 0 12px}
+          .spec-content h3{font-size:14px;font-weight:700;color:${T.text};margin:20px 0 8px;font-family:${T.fontSans}}
+          .spec-content p{font-size:13px;color:${T.muted};line-height:1.75;margin:0 0 12px}
+          .spec-content ul,.spec-content ol{margin:0 0 14px;padding-left:20px}
+          .spec-content li{font-size:13px;color:${T.muted};line-height:1.7;margin-bottom:4px}
+          .spec-content strong{color:${T.text};font-weight:700}
+          .spec-content code{font-family:${T.fontMono};font-size:11px;background:${T.surfaceRaised};border:1px solid ${T.border};border-radius:4px;padding:1px 5px;color:${T.accent}}
+          .spec-content pre{background:${T.surfaceRaised};border:1px solid ${T.border};border-radius:8px;padding:14px;overflow-x:auto;margin:0 0 14px}
+          .spec-content pre code{background:none;border:none;padding:0;font-size:12px;color:${T.text}}
+          .spec-content blockquote{border-left:3px solid ${T.accentBorder};margin:0 0 14px;padding:8px 16px;background:${T.accentDim};border-radius:0 8px 8px 0}
+          .spec-content blockquote p{color:${T.text};margin:0}
+          .spec-content hr{border:none;border-top:1px solid ${T.border};margin:24px 0}
+        `}</style>
+        <div style={{ maxWidth: "760px", width: "100%", marginBottom: "20px" }}>
+          <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "8px" }}>SPEC COMPLETE</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+            <h2 style={{ margin: 0, fontFamily: T.fontDisplay, fontWeight: "400", fontSize: "26px", color: T.text }}>Your architecture spec</h2>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={copySpec} style={{ ...btnGhost, padding: "9px 16px", fontSize: "13px" }}>📋 Copy</button>
+              <button onClick={downloadSpec} style={{ ...btnGhost, padding: "9px 16px", fontSize: "13px" }}>⬇ Download .md</button>
+              <button onClick={() => {
+                setStageAndScroll("describe"); setDescription(""); setInferred(null); setAnswers({});
+                setSecurity([]); setTools([]); setToolSelections(new Set()); setConstraints(""); setCustomAgents(""); setLegacyDesc(""); setSpecContent("");
+              }} style={{ ...btnGhost, padding: "9px 16px", fontSize: "13px" }}>↺ Start over</button>
+            </div>
           </div>
-          <button style={{ ...btnPrimary, width: "100%", padding: "13px", fontSize: "15px" }}>📄 View Full Spec</button>
-          <button style={{ ...btnGhost, width: "100%", marginTop: "8px" }} onClick={() => {
-            setStageAndScroll("describe"); setDescription(""); setInferred(null); setAnswers({});
-            setSecurity([]); setTools([]); setToolSelections(new Set()); setConstraints(""); setCustomAgents(""); setLegacyDesc("");
-          }}>
-            Start over
-          </button>
+        </div>
+        {specError && (
+          <div style={{ maxWidth: "760px", width: "100%", marginBottom: "16px", padding: "14px 16px", background: T.dangerDim, border: `1px solid ${T.dangerBorder}`, borderRadius: "10px", fontSize: "13px", color: T.danger }}>
+            {specError}
+          </div>
+        )}
+        <div style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+          {specContent ? (
+            <div className="spec-content">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{specContent}</ReactMarkdown>
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "40px 0", color: T.muted, fontSize: "14px" }}>
+              No spec content was generated. Please try again.
+            </div>
+          )}
         </div>
       </div>
     );
