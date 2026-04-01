@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AI Agent Architecture Recommender"
+version = "1.0.0"
+id = "artifacts/arch-recommender"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20608
+
+[services.development]
+run = "pnpm --filter @workspace/arch-recommender run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/arch-recommender", "run", "build" ]
+publicDir = "artifacts/arch-recommender/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20608"
+BASE_PATH = "/"
