@@ -722,7 +722,7 @@ export default function ArchV4() {
       <div style={container}>
         <div style={{ maxWidth: "640px", width: "100%", marginBottom: "32px" }}>
           <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em", marginBottom: "10px" }}>AGENT ARCHITECTURE RECOMMENDER</div>
-          <h1 style={{ margin: "0 0 12px", fontSize: "34px", fontWeight: "400", fontFamily: T.fontDisplay, color: T.text, lineHeight: 1.2 }}>Describe your agent.</h1>
+          <h1 style={{ margin: "0 0 12px", fontSize: "34px", fontWeight: "400", fontFamily: T.fontDisplay, color: T.text, lineHeight: 1.2 }}>Describe your agentic system.</h1>
           <p style={{ margin: 0, fontSize: "14px", color: T.muted, lineHeight: 1.7, maxWidth: "520px" }}>
             Tell us what you're building in plain language. We'll extract the architecture parameters, identify gaps, and ask only the questions we can't answer from your description.
           </p>
@@ -757,9 +757,6 @@ export default function ArchV4() {
             </button>
           </div>
         </div>
-        <p style={{ marginTop: "16px", fontSize: "11px", color: T.muted, fontFamily: T.fontMono, letterSpacing: "0.04em" }}>
-          Powered by Claude · Your description is used only to generate your spec
-        </p>
       </div>
     );
   }
