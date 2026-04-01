@@ -543,6 +543,8 @@ export default function ArchV4() {
   const [specContent, setSpecContent] = useState("");
   const [specDone, setSpecDone] = useState(false);
   const [specError, setSpecError] = useState<string | null>(null);
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, { status: "working" | "done"; name: string; icon: string }>>({});
+  const [genPhase, setGenPhase] = useState<"idle" | "specialists" | "synthesis">("idle");
   const specRef = useRef<HTMLDivElement>(null);
 
   const getDraft = () => ({
@@ -640,6 +642,8 @@ export default function ArchV4() {
     setSpecContent("");
     setSpecDone(false);
     setSpecError(null);
+    setAgentStatuses({});
+    setGenPhase("idle");
     setStageAndScroll("generating");
     try {
       const res = await fetch("/api/arch/generate", {
@@ -671,8 +675,27 @@ export default function ArchV4() {
           const json = line.slice(6).trim();
           if (!json) continue;
           try {
-            const ev = JSON.parse(json) as { content?: string; done?: boolean; error?: string };
+            const ev = JSON.parse(json) as {
+              content?: string;
+              done?: boolean;
+              error?: string;
+              phase?: "specialists" | "synthesis";
+              agentStart?: string;
+              agentName?: string;
+              agentDone?: string;
+              icon?: string;
+            };
             if (ev.error) { setSpecError(ev.error); break; }
+            if (ev.phase) { setGenPhase(ev.phase); }
+            if (ev.agentStart) {
+              setAgentStatuses(prev => ({ ...prev, [ev.agentStart!]: { status: "working", name: ev.agentName ?? ev.agentStart!, icon: ev.icon ?? "🔧" } }));
+            }
+            if (ev.agentDone) {
+              setAgentStatuses(prev => {
+                const existing = prev[ev.agentDone!];
+                return { ...prev, [ev.agentDone!]: { status: "done", name: existing?.name ?? ev.agentName ?? ev.agentDone!, icon: existing?.icon ?? ev.icon ?? "🔧" } };
+              });
+            }
             if (ev.content) {
               setSpecContent(prev => prev + ev.content);
               if (specRef.current) specRef.current.scrollTop = specRef.current.scrollHeight;
@@ -1164,18 +1187,48 @@ export default function ArchV4() {
 
   if (stage === "generating") {
     const hasContent = specContent.length > 0;
+    const agentList = Object.entries(agentStatuses);
+    const allAgentsDone = agentList.length > 0 && agentList.every(([, { status }]) => status === "done");
+
     return (
       <div style={{ ...container }}>
-        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}@keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0}}`}</style>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}@keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
         <div style={{ maxWidth: "760px", width: "100%", marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ fontSize: "20px", display: "inline-block", animation: "spin 1.8s linear infinite" }}>⚙️</div>
+          <div style={{ fontSize: "20px", display: "inline-block", animation: "spin 1.8s linear infinite", flexShrink: 0 }}>⚙️</div>
           <div>
-            <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em" }}>GENERATING SPEC</div>
-            <div style={{ fontSize: "13px", color: T.muted }}>{hasContent ? "Writing your architecture specification..." : "Claude is analyzing your requirements..."}</div>
+            <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.accent, letterSpacing: "0.1em" }}>
+              {genPhase === "synthesis" ? "SYNTHESIZING" : genPhase === "specialists" ? "SPECIALIST REVIEW" : "INITIALIZING"}
+            </div>
+            <div style={{ fontSize: "13px", color: T.muted }}>
+              {hasContent ? "Writing your architecture specification..." : genPhase === "synthesis" ? "Lead architect synthesizing all reviews..." : genPhase === "specialists" ? "Specialist panel reviewing your system..." : "Starting..."}
+            </div>
           </div>
         </div>
-        {hasContent ? (
-          <div ref={specRef} style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", maxHeight: "70vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+
+        {agentList.length > 0 && (
+          <div style={{ maxWidth: "760px", width: "100%", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "5px" }}>
+            {agentList.map(([id, { status, name, icon }]) => (
+              <div key={id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 14px", background: T.surface, borderRadius: "8px", border: `1px solid ${status === "done" ? T.accentBorder : T.border}`, fontSize: "12px", fontFamily: T.fontMono, animation: "fadeIn 0.2s ease-out", transition: "border 0.2s" }}>
+                <span style={{ fontSize: "14px", flexShrink: 0 }}>{icon}</span>
+                <span style={{ color: status === "done" ? T.muted : T.text }}>{name}</span>
+                <span style={{ marginLeft: "auto", color: status === "done" ? T.green : T.accent, fontSize: "10px", animation: status === "working" ? "pulse 1.4s ease-in-out infinite" : "none" }}>
+                  {status === "done" ? "✓ DONE" : "REVIEWING..."}
+                </span>
+              </div>
+            ))}
+            {allAgentsDone && genPhase === "synthesis" && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 14px", background: T.accentDim, borderRadius: "8px", border: `1px solid ${T.accentBorder}`, fontSize: "12px", fontFamily: T.fontMono, animation: "fadeIn 0.2s ease-out" }}>
+                <span style={{ color: T.accent, fontSize: "10px", animation: "pulse 1.4s ease-in-out infinite" }}>●</span>
+                <span style={{ color: T.accent }}>Lead Architect</span>
+                <span style={{ marginLeft: "auto", color: T.accent, fontSize: "10px", animation: "pulse 1.4s ease-in-out infinite" }}>SYNTHESIZING...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasContent && (
+          <div ref={specRef} style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", maxHeight: "55vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
             <style>{`
               .spec-content h1{font-family:${T.fontDisplay};font-weight:400;font-size:26px;color:${T.text};margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid ${T.border}}
               .spec-content h2{font-family:${T.fontDisplay};font-weight:400;font-size:20px;color:${T.accent};margin:28px 0 12px}
@@ -1195,17 +1248,6 @@ export default function ArchV4() {
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{specContent}</ReactMarkdown>
             </div>
             <span style={{ display: "inline-block", width: "2px", height: "14px", background: T.accent, animation: "cursor-blink 1s ease-in-out infinite", verticalAlign: "middle", marginLeft: "2px" }} />
-          </div>
-        ) : (
-          <div style={{ maxWidth: "760px", width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "16px", padding: "36px", boxSizing: "border-box", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-              {["🏗️ AI Architect", "🔄 DevOps", "🔒 Security", "✍️ Tech Writing", "⚖️ Eval Specialist", "🛡️ Safety", "🧠 Memory & State"].map((a, i) => (
-                <div key={a} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 14px", background: T.surfaceRaised, borderRadius: "8px", fontSize: "12px", fontFamily: T.fontMono, color: T.muted, animation: `pulse 1.6s ease-in-out ${i * 0.18}s infinite` }}>
-                  <span style={{ color: T.text }}>{a}</span>
-                  <span style={{ marginLeft: "auto", color: T.accent, fontSize: "10px" }}>● ACTIVE</span>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>
