@@ -215,8 +215,19 @@ router.post("/generate", async (req, res) => {
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
-  const sendEvent = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  // Disable Nagle's algorithm so each write flushes immediately
+  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
+  if (socket?.setNoDelay) socket.setNoDelay(true);
+
+  const sendEvent = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if ((res as unknown as { flush?: () => void }).flush) {
+      (res as unknown as { flush: () => void }).flush();
+    }
+  };
 
   const specContext = buildSpecContext(body);
 
