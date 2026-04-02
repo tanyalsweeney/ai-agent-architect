@@ -68,19 +68,6 @@ export default defineConfig({
         changeOrigin: true,
         proxyTimeout: 600000,
         timeout: 600000,
-        configure: (proxy) => {
-          proxy.on("proxyRes", (proxyRes, _req, res) => {
-            const ct = proxyRes.headers["content-type"] ?? "";
-            if (ct.includes("text/event-stream")) {
-              res.writeHead(proxyRes.statusCode ?? 200, {
-                ...proxyRes.headers,
-                "x-accel-buffering": "no",
-                "cache-control": "no-cache",
-              });
-              proxyRes.pipe(res, { end: true });
-            }
-          });
-        },
       },
     },
     fs: {

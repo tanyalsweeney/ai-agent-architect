@@ -646,7 +646,11 @@ export default function ArchV4() {
     setGenPhase("idle");
     setStageAndScroll("generating");
     try {
-      const res = await fetch("/api/arch/generate", {
+      // In dev, bypass the Vite proxy (which buffers SSE) and hit the API server directly.
+      const generateUrl = import.meta.env.DEV
+        ? "http://localhost:8080/api/arch/generate"
+        : "/api/arch/generate";
+      const res = await fetch(generateUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
