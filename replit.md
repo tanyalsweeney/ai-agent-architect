@@ -105,6 +105,37 @@ React + Vite SPA — the AI Agent Architecture Recommender wizard. Multi-stage f
 - Vite proxies `/api` → `http://localhost:8080` in dev mode
 - Running on port 20608
 
+#### Multi-Agent Generation Architecture
+
+`POST /api/arch/generate` runs a two-phase pipeline:
+
+**Phase 1 — Specialist Review (parallel):** All seven agents run simultaneously via `Promise.all`. Each agent reviews the spec context through its specialist lens and returns a full review. The frontend tracks per-agent status via SSE events (`agentStart`, `agentDone`).
+
+**Phase 2 — Lead Architect Synthesis (streamed):** All seven specialist reviews are passed to a synthesis prompt. The output streams to the client via SSE `content` events and is rendered as markdown.
+
+#### The Seven-Agent Panel (`artifacts/api-server/src/agents/index.ts`)
+
+| ID | Name | Role |
+|---|---|---|
+| `cicd` | 🔧 CI/CD Engineer | Deployment pipelines, auth, environment parity, trip hazards |
+| `ui-architect` | 🖥️ UI Architect | Frontend framework, rendering strategy, ADRs, budget-tier calibration |
+| `devops-architect` | ⚙️ DevOps Architect | IaC, container orchestration, observability, release safety |
+| `technical-writer` | ✍️ Technical Writer | Implementation clarity, terminology, flags [UNRESOLVED] gaps |
+| `sentinel` | 🛡️ SENTINEL | Security baseline, threat model, pipeline gate manifest, versioned tools |
+| `perf-agent` | ⚡ Performance Engineer | Latency analysis, bottleneck hierarchy, perf verdicts (APPROVED/CONCERN/BLOCKING) |
+| `skeptical-architect` | 🔍 Skeptical Architect | Adversarial review, overall verdict, complexity budget, agentic-specific risks |
+
+To add a new agent: add an entry to the `AGENTS` array in `src/agents/index.ts`. No other changes required. The synthesis prompt already references all seven specialists by role.
+
+#### SSE Event Schema
+
+- `{ phase: "specialists" | "synthesis", message: string }` — phase announcements
+- `{ agentStart: id, agentName: string, icon: string }` — agent starting
+- `{ agentDone: id, agentName: string, icon: string }` — agent finished
+- `{ content: string }` — streamed synthesis text chunk
+- `{ done: true }` — generation complete
+- `{ error: string }` — error during generation
+
 ### `lib/integrations-anthropic-ai` (`@workspace/integrations-anthropic-ai`)
 
 Replit AI Integrations wrapper for Anthropic Claude. Provides a pre-configured `anthropic` client using `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` and `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (automatically provisioned, no user API key needed). Also includes batch processing utilities and DB schema for conversations/messages.
