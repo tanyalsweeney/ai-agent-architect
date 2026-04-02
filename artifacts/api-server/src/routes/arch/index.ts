@@ -199,45 +199,51 @@ router.post("/analyze", async (req, res) => {
   }
 });
 
-router.post("/generate", async (req, res) => {
-  const body = req.body as {
-    description: string;
-    answers: Record<string, string>;
-    security: string[];
-    tools: string[];
-    constraints?: string;
-    customAgents?: string;
-    legacyDesc?: string;
-    summary?: string;
-  };
+// ---------------------------------------------------------------------------
+// In-memory job store for polling-based generation
+// (SSE doesn't work reliably through Replit's workspace proxy)
+// ---------------------------------------------------------------------------
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+type AgentStatus = { status: "working" | "done"; name: string; icon: string };
 
-  // Disable Nagle's algorithm so each write flushes immediately
-  const socket = (res as unknown as { socket?: { setNoDelay?: (v: boolean) => void } }).socket;
-  if (socket?.setNoDelay) socket.setNoDelay(true);
+interface GenerateJob {
+  phase: "specialists" | "synthesis" | "done" | "error";
+  agentStatuses: Record<string, AgentStatus>;
+  content: string;
+  done: boolean;
+  error?: string;
+  createdAt: number;
+}
 
-  const sendEvent = (data: object) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-    if ((res as unknown as { flush?: () => void }).flush) {
-      (res as unknown as { flush: () => void }).flush();
-    }
-  };
+const jobs = new Map<string, GenerateJob>();
 
+// Clean up jobs older than 30 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, job] of jobs) {
+    if (job.createdAt < cutoff) jobs.delete(id);
+  }
+}, 5 * 60 * 1000);
+
+async function runGenerateJob(jobId: string, body: {
+  description: string;
+  answers: Record<string, string>;
+  security: string[];
+  tools: string[];
+  constraints?: string;
+  customAgents?: string;
+  legacyDesc?: string;
+  summary?: string;
+}) {
+  const job = jobs.get(jobId)!;
   const specContext = buildSpecContext(body);
 
   try {
-    // Phase 1: Run all specialist agents in parallel
-    sendEvent({ phase: "specialists", message: `Consulting ${AGENTS.length} specialist${AGENTS.length !== 1 ? "s" : ""}...` });
+    job.phase = "specialists";
 
     const agentResults = await Promise.all(
       AGENTS.map(async (agent) => {
-        sendEvent({ agentStart: agent.id, agentName: agent.name, icon: agent.icon });
+        job.agentStatuses[agent.id] = { status: "working", name: agent.name, icon: agent.icon };
         try {
           const msg = await anthropic.messages.create({
             model: "claude-sonnet-4-6",
@@ -252,18 +258,17 @@ router.post("/generate", async (req, res) => {
           });
           const block = msg.content[0];
           const text = block.type === "text" ? block.text : "";
-          sendEvent({ agentDone: agent.id, agentName: agent.name, icon: agent.icon });
+          job.agentStatuses[agent.id] = { status: "done", name: agent.name, icon: agent.icon };
           return { agent, text };
         } catch (err) {
           console.error(`Agent ${agent.id} error:`, err);
-          sendEvent({ agentDone: agent.id, agentName: agent.name, icon: agent.icon });
+          job.agentStatuses[agent.id] = { status: "done", name: agent.name, icon: agent.icon };
           return { agent, text: `[${agent.name} review unavailable]` };
         }
       })
     );
 
-    // Phase 2: Stream the synthesis
-    sendEvent({ phase: "synthesis", message: "Synthesizing specialist reviews..." });
+    job.phase = "synthesis";
 
     const specialistReviews = agentResults
       .map(({ agent, text }) => `## ${agent.icon} ${agent.name} Review\n\n${text}`)
@@ -292,17 +297,62 @@ Now produce the final architecture specification. Be opinionated. Make the calls
 
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        sendEvent({ content: event.delta.text });
+        job.content += event.delta.text;
       }
     }
 
-    sendEvent({ done: true });
-    res.end();
+    job.phase = "done";
+    job.done = true;
   } catch (err: unknown) {
     console.error("Generate error:", err);
-    sendEvent({ error: "Failed to generate spec" });
-    res.end();
+    job.phase = "error";
+    job.error = "Failed to generate specification. Please try again.";
+    job.done = true;
   }
+}
+
+// POST /generate — start a job, return jobId immediately
+router.post("/generate", (req, res) => {
+  const body = req.body as {
+    description: string;
+    answers: Record<string, string>;
+    security: string[];
+    tools: string[];
+    constraints?: string;
+    customAgents?: string;
+    legacyDesc?: string;
+    summary?: string;
+  };
+
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  jobs.set(jobId, {
+    phase: "specialists",
+    agentStatuses: {},
+    content: "",
+    done: false,
+    createdAt: Date.now(),
+  });
+
+  // Fire and forget — client polls for updates
+  void runGenerateJob(jobId, body);
+
+  res.json({ jobId });
+});
+
+// GET /generate/:jobId — poll for current job state
+router.get("/generate/:jobId", (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  res.json({
+    phase: job.phase,
+    agentStatuses: job.agentStatuses,
+    content: job.content,
+    done: job.done,
+    error: job.error,
+  });
 });
 
 export default router;

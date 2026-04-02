@@ -645,12 +645,10 @@ export default function ArchV4() {
     setAgentStatuses({});
     setGenPhase("idle");
     setStageAndScroll("generating");
+
     try {
-      // In dev, bypass the Vite proxy (which buffers SSE) and hit the API server directly.
-      const generateUrl = import.meta.env.DEV
-        ? "http://localhost:8080/api/arch/generate"
-        : "/api/arch/generate";
-      const res = await fetch(generateUrl, {
+      // Start job — server returns a jobId immediately
+      const startRes = await fetch("/api/arch/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -664,52 +662,56 @@ export default function ArchV4() {
           summary: inferred?.summary ?? "",
         }),
       });
-      if (!res.ok || !res.body) throw new Error(`Server error: ${res.status}`);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      if (!startRes.ok) throw new Error(`Server error: ${startRes.status}`);
+      const { jobId } = await startRes.json() as { jobId: string };
+
+      // Poll until done
+      let lastContentLen = 0;
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (!json) continue;
-          try {
-            const ev = JSON.parse(json) as {
-              content?: string;
-              done?: boolean;
-              error?: string;
-              phase?: "specialists" | "synthesis";
-              agentStart?: string;
-              agentName?: string;
-              agentDone?: string;
-              icon?: string;
-            };
-            if (ev.error) { setSpecError(ev.error); break; }
-            if (ev.phase) { setGenPhase(ev.phase); }
-            if (ev.agentStart) {
-              setAgentStatuses(prev => ({ ...prev, [ev.agentStart!]: { status: "working", name: ev.agentName ?? ev.agentStart!, icon: ev.icon ?? "🔧" } }));
-            }
-            if (ev.agentDone) {
-              setAgentStatuses(prev => {
-                const existing = prev[ev.agentDone!];
-                return { ...prev, [ev.agentDone!]: { status: "done", name: existing?.name ?? ev.agentName ?? ev.agentDone!, icon: existing?.icon ?? ev.icon ?? "🔧" } };
-              });
-            }
-            if (ev.content) {
-              setSpecContent(prev => prev + ev.content);
-              if (specRef.current) specRef.current.scrollTop = specRef.current.scrollHeight;
-            }
-            if (ev.done) { setSpecDone(true); setStageAndScroll("done"); }
-          } catch { /* skip malformed events */ }
+        await new Promise(r => setTimeout(r, 1500));
+
+        const pollRes = await fetch(`/api/arch/generate/${jobId}`);
+        if (!pollRes.ok) throw new Error(`Poll error: ${pollRes.status}`);
+
+        const state = await pollRes.json() as {
+          phase: "specialists" | "synthesis" | "done" | "error";
+          agentStatuses: Record<string, { status: "working" | "done"; name: string; icon: string }>;
+          content: string;
+          done: boolean;
+          error?: string;
+        };
+
+        if (state.error) {
+          setSpecError(state.error);
+          setSpecDone(true);
+          setStageAndScroll("done");
+          return;
+        }
+
+        // Update phase label
+        if (state.phase === "specialists" || state.phase === "synthesis") {
+          setGenPhase(state.phase);
+        }
+
+        // Update agent statuses
+        setAgentStatuses(state.agentStatuses);
+
+        // Append new content
+        if (state.content.length > lastContentLen) {
+          const newChunk = state.content.slice(lastContentLen);
+          lastContentLen = state.content.length;
+          setSpecContent(state.content);
+          if (newChunk && specRef.current) {
+            specRef.current.scrollTop = specRef.current.scrollHeight;
+          }
+        }
+
+        if (state.done) {
+          setSpecDone(true);
+          setStageAndScroll("done");
+          return;
         }
       }
-      setSpecDone(true);
-      setStageAndScroll("done");
     } catch (e: unknown) {
       setSpecError(`Generation failed: ${(e as Error).message}`);
       setSpecDone(true);
