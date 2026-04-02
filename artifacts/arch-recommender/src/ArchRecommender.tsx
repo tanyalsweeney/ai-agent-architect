@@ -1166,9 +1166,17 @@ export default function ArchV4() {
             <p onClick={() => setStageAndScroll("constraints")} style={{ fontSize: "13px", color: T.muted, margin: "0 0 20px", lineHeight: 1.6, fontStyle: "italic", cursor: "pointer" }}>"{constraints}"</p>
           </>}
 
-          <MonoLabel>Agents being consulted</MonoLabel>
+          <MonoLabel>Specialist panel</MonoLabel>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "28px" }}>
-            {["🏗️ Architect", "🔄 DevOps", "🔒 Security", "✍️ Tech Writing", "⚖️ Eval", "🛡️ Safety", "🧠 Memory", ...(customAgents ? [`🧪 ${customAgents.split(",")[0].trim()}`] : [])].map(a => (
+            {[
+              "🔧 CI/CD Engineer",
+              "🖥️ UI Architect",
+              "⚙️ DevOps Architect",
+              "✍️ Technical Writer",
+              "🛡️ SENTINEL",
+              "⚡ Performance Engineer",
+              "🔍 Skeptical Architect",
+            ].map(a => (
               <span key={a} style={{ background: T.accentDim, border: `1px solid ${T.accentBorder}`, color: T.accent, borderRadius: "20px", padding: "4px 12px", fontSize: "11px", fontWeight: "600", fontFamily: T.fontMono }}>{a}</span>
             ))}
           </div>
