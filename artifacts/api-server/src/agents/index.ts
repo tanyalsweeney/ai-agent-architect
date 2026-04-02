@@ -1,3 +1,5 @@
+import { SHARED_CONTEXT } from "./shared-context";
+
 export interface AgentDefinition {
   id: string;
   name: string;
@@ -5,7 +7,7 @@ export interface AgentDefinition {
   systemPrompt: string;
 }
 
-export const AGENTS: AgentDefinition[] = [
+const RAW_AGENTS: AgentDefinition[] = [
   {
     id: "cicd",
     name: "CI/CD Engineer",
@@ -491,3 +493,9 @@ LLM inference is not free. Agentic loops multiply costs non-linearly. You requir
 - You do not approve a design you have not actually reviewed. If context is missing, you say so and specify exactly what you need.`,
   },
 ];
+
+// Prepend shared conventions to every agent's system prompt
+export const AGENTS: AgentDefinition[] = RAW_AGENTS.map((agent) => ({
+  ...agent,
+  systemPrompt: `${SHARED_CONTEXT}\n${agent.systemPrompt}`,
+}));
